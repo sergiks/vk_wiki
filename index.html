@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+
+<html lang="Ru">
+<head>
+    <meta charset="utf-8">
+
+    <title>Вики-отзывы ВКонтакте</title>
+    <meta name="description" content="Генератор вики-кода нового отзыва о приложении Дезертир">
+    <meta name="keywords" content="Дезертир,утилита,ВКонтакте">
+    <meta name="robots" content="none">
+    <meta name="author" content="Sergei Sokolov, hello@sergeisokolov.com">
+    
+    <link rel="stylesheet" href="//yastatic.net/bootstrap/3.3.1/css/bootstrap.min.css">
+    <style>
+	    #b-result { margin-top: 40px; }
+    </style>
+</head>
+
+<body>
+	<div class="container">
+		<h2>Deserter.wiki</h2>
+		<div style="margin: 0 0 20px;">Быстрое создание wiki-кода нового отзыва для <a href="https://vk.com/page-46994534_44323603" target="_blank">страницы</a>.</div>
+		
+		<div id="messages"></div>
+		
+		<div class="form-group">
+			<label for="i-url">Ссылка на дату/время поста</label>
+			<input type="url" class="form-control" name="url" placeholder="Ссылка" id="i-url">
+		</div>
+		
+		<button type="submit" class="btn btn-default" id="btn-go">Сгенерировать код</button>
+
+		<pre id="b-result" style="display:none"></pre>
+	</div>
+	
+	<script src="//yastatic.net/jquery/2.1.3/jquery.min.js"></script>
+	<script>
+		(function($,d,w){
+			"use strict";
+			
+			var WikiFeedback = {
+				run: function(e) {
+					var url, match, data;
+					e.preventDefault();
+					url = $('#i-url').val();
+					if( !url) return;
+					
+					/* Example link: https://vk.com/wall-46994534_2776  */
+					match = url.match(/wall([0-9-]+)_([0-9]+)$/);
+					if( !match) {
+						this.errMsg('Неправильный формат ссылки');
+						return;
+					}
+					
+					data = { posts: match[1]+'_'+match[2], extended: 1};
+
+					$.ajax({
+						url:		'https://api.vk.com/method/wall.getById',
+						data:		data,
+						method:		'POST',
+						dataType:	"jsonp",
+						success:	this.gotData.bind(this),
+					});
+				}
+				
+				,gotData: function(d){
+					if( !d  ||  !d.response) return this.errMsg('bad response from VK:' + JSON.stringify(d));
+					$('#b-result').show().text( this.makeCode( d.response));
+				}
+
+				,makeCode: function(data) {
+					var tmpl = {
+						src:	"'''[[id%ID%|%NAME%]]''' [%URL%|%DATE%]\n<blockquote>%TEXT%</blockquote>"
+						,id:	""
+						,name:	""
+						,url:	""
+						,date:	""
+						,text:	""
+						,render: function() {
+							return this.src
+								.replace( '%ID%',	this.id)
+								.replace( '%NAME%',	this.name)
+								.replace( '%URL%',	this.url)
+								.replace( '%DATE%', this.date)
+								.replace( '%TEXT%',	this.text)
+							;
+						}
+					}, post, D;
+
+					if( !data  ||  !data.wall  ||  !data.profiles)
+						return this.errMsg('bad response from VK:' + JSON.stringify(data));
+					post = data.wall[0];
+
+
+					D = new Date( 1000 * post.date);
+					tmpl.date = D.getDate()
+						+' '+
+						("янв,фев,мар,апр,мая,июн,июл,авг,сен,окт,ноя,дек".split(","))[ D.getMonth()] 
+						+' '+
+						D.getFullYear();
+
+					tmpl.id	= post.from_id;
+					tmpl.text = post.text;
+					tmpl.url = 'https://vk.com/wall' + post.to_id +'_'+ post.id;
+									
+					// find the user among profiles supplied
+					for( var i=0; i<data.profiles.length; i++) {
+						if( data.profiles[i].uid != post.from_id) continue;
+						tmpl.name = data.profiles[i].first_name +" "+ data.profiles[i].last_name;
+						break;
+					}
+					
+					return tmpl.render();
+				}
+				
+				,errMsg: function(msg) {
+					var e = $('<div class="alert alert-danger" role="alert"></div>');
+					$(e).text(msg);
+					$('#messages').append( e);
+				}
+				
+				,init: function() {
+					$('#btn-go').on('click', this.run.bind(this));
+				}
+			};
+			
+			w.wf = WikiFeedback;
+			w.wf.init();
+		})(jQuery,document,window);
+	</script>
+</body>
+</html>
